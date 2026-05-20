@@ -1,5 +1,7 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { existsSync } from 'fs'
+import { join } from 'path'
 
 const execFileAsync = promisify(execFile)
 
@@ -9,6 +11,23 @@ const execFileAsync = promisify(execFile)
  */
 export async function detectInstalledAgents() {
   const isWin = process.platform === 'win32'
+
+  function findGlabPath() {
+    if (!isWin) return 'glab'
+    const home = process.env.USERPROFILE || ''
+    const commonPaths = [
+      join(home, 'AppData', 'Local', 'Programs', 'glab', 'glab.exe'),
+      join(home, 'AppData', 'Local', 'Microsoft', 'WinGet', 'Links', 'glab.exe'),
+      'C:\\Program Files\\glab\\glab.exe',
+      'C:\\Program Files\\GitLab\\glab\\glab.exe'
+    ]
+    for (const p of commonPaths) {
+      if (existsSync(p)) {
+        return p
+      }
+    }
+    return 'glab'
+  }
 
   /**
    * Run a command and extract a version string from stdout.
@@ -33,6 +52,8 @@ export async function detectInstalledAgents() {
     }
   }
 
+  const glabPath = findGlabPath()
+
   // Run all probes in parallel — shell:true on Windows resolves .cmd automatically
   const [nodejs, npm, pnpm, git, gh, glab, claudeCode, opencode, codex] = await Promise.all([
     probe('node', ['--version']),
@@ -40,7 +61,7 @@ export async function detectInstalledAgents() {
     probe('pnpm', ['--version']),
     probe('git', ['--version']),
     probe('gh', ['--version']),
-    probe('glab', ['--version']),
+    probe(glabPath, ['--version']),
     probe('claude', ['--version']),
     probe('opencode', ['--version']),
     probe('codex', ['--version'])

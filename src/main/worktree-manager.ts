@@ -3,6 +3,7 @@ import { promisify } from 'util'
 import { existsSync, mkdirSync, rmSync } from 'fs'
 import { join } from 'path'
 import { app, type BrowserWindow } from 'electron'
+import { findGlabPath } from './gitlab-manager'
 
 const execFileAsync = promisify(execFile)
 
@@ -85,13 +86,11 @@ export class WorktreeManager {
     mkdirSync(orgDir, { recursive: true })
 
     if (provider === 'gitlab') {
-      console.log(`[WorktreeManager]   Executing: glab repo clone ${fullName} ${barePath} -- --bare`)
-      await execFileAsync('glab', ['repo', 'clone', fullName, barePath, '--', '--bare'], {
+      const glabPath = await findGlabPath()
+      console.log(`[WorktreeManager]   Executing: ${glabPath} repo clone ${fullName} ${barePath} -- --bare`)
+      await execFileAsync(glabPath, ['repo', 'clone', fullName, barePath, '--', '--bare'], {
         timeout: 300000
       })
-      // glab bare clone doesn't set fetch refspec — without it, `git fetch origin`
-      // only fetches HEAD as FETCH_HEAD and doesn't create remote tracking branches
-      // (e.g. origin/main). This breaks worktree creation from origin/<branch>.
       console.log(`[WorktreeManager]   Setting fetch refspec for glab bare clone`)
       await execFileAsync('git', [
         'config', 'remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*'

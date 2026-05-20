@@ -1,6 +1,8 @@
 import { execFile, spawn, type ChildProcess } from 'child_process'
 import { promisify } from 'util'
 import { shell } from 'electron'
+import { existsSync } from 'fs'
+import { join } from 'path'
 import type { GitHubRepo } from './github-manager'
 
 const execFileAsync = promisify(execFile)
@@ -11,6 +13,38 @@ export interface GlabCliStatus {
   installed: boolean
   authenticated: boolean
   username?: string
+}
+
+export async function findGlabPath(): Promise<string> {
+  const isWin = process.platform === 'win32'
+  if (!isWin) return 'glab'
+
+  try {
+    const { execFile } = await import('child_process')
+    const { promisify } = await import('util')
+    const execFileAsync = promisify(execFile)
+    const { stdout } = await execFileAsync('where', ['glab'])
+    const found = stdout.trim().split(/\r?\n/)[0]
+    if (found && existsSync(found)) {
+      return found
+    }
+  } catch {}
+
+  const home = process.env.USERPROFILE || ''
+  const commonPaths = [
+    join(home, 'AppData', 'Local', 'Programs', 'glab', 'glab.exe'),
+    join(home, 'AppData', 'Local', 'Microsoft', 'WinGet', 'Links', 'glab.exe'),
+    'C:\\Program Files\\glab\\glab.exe',
+    'C:\\Program Files\\GitLab\\glab\\glab.exe'
+  ]
+
+  for (const p of commonPaths) {
+    if (existsSync(p)) {
+      return p
+    }
+  }
+
+  return 'glab'
 }
 
 export class GitLabManager {
@@ -44,9 +78,11 @@ export class GitLabManager {
     const url = `${basePath}${separator}per_page=100&order_by=updated_at&sort=desc${extraParams ? '&' + extraParams : ''}`
 
     console.log(`[GitLabManager] Fetching: glab api ${url} --paginate`)
-    const { stdout } = await execFileAsync('glab', [
+    const glabPath = await findGlabPath()
+    const { stdout } = await execFileAsync(glabPath, [
       'api', url, '--paginate'
     ], { maxBuffer: GLAB_API_MAX_BUFFER, timeout: 60000 })
+
 
     const raw = JSON.parse(stdout) as Record<string, unknown>[]
 
@@ -69,14 +105,15 @@ export class GitLabManager {
   }
 
   async checkGlabCli(): Promise<GlabCliStatus> {
+    const glabPath = await findGlabPath()
     try {
-      await execFileAsync('glab', ['--version'])
+      await execFileAsync(glabPath, ['--version'])
     } catch {
       return { installed: false, authenticated: false }
     }
 
     try {
-      const { stdout } = await execFileAsync('glab', ['auth', 'status'])
+      const { stdout } = await execFileAsync(glabPath, ['auth', 'status'])
       // glab auth status outputs "Logged in to <hostname> as <username>"
       const match = stdout.match(/Logged in to .+ as (\S+)/) ||
                     stdout.match(/as (\S+)/)
@@ -93,10 +130,11 @@ export class GitLabManager {
   }
 
   async startWebAuth(onDeviceCode?: (code: string) => void): Promise<void> {
+    const glabPath = await findGlabPath()
     return new Promise((resolve, reject) => {
       this.authProcess = spawn(
-        'glab',
-        ['auth', 'login', '--hostname', 'gitlab.com'],
+        glabPath,
+        ['auth', 'login', '--hostname', 'gitlab.com', '--web', '--git-protocol', 'https'],
         { stdio: ['pipe', 'pipe', 'pipe'] }
       )
 

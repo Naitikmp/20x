@@ -8,10 +8,12 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { settingsApi } from '@/lib/ipc-client'
 
 export function AdvancedSettings() {
-  const { githubOrg, ghCliStatus, setGithubOrg, checkGhCli, startGhAuth } = useSettingsStore()
+  const { githubOrg, ghCliStatus, setGithubOrg, checkGhCli, startGhAuth, glabCliStatus, checkGlabCli, startGlabAuth } = useSettingsStore()
   const [orgInput, setOrgInput] = useState(githubOrg || '')
   const [isAuthenticating, setIsAuthenticating] = useState(false)
   const [deviceCode, setDeviceCode] = useState('')
+  const [isGlAuthenticating, setIsGlAuthenticating] = useState(false)
+  const [glDeviceCode, setGlDeviceCode] = useState('')
 
   // API Keys
   const [anthropicKey, setAnthropicKey] = useState('')
@@ -19,14 +21,21 @@ export function AdvancedSettings() {
   const [googleKey, setGoogleKey] = useState('')
 
   useEffect(() => {
-    const unsubscribe = window.electronAPI.onGithubDeviceCode((code) => {
+    const unsubscribeGh = window.electronAPI.onGithubDeviceCode((code) => {
       setDeviceCode(code)
     })
-    return unsubscribe
+    const unsubscribeGl = window.electronAPI.onGitlabDeviceCode((code) => {
+      setGlDeviceCode(code)
+    })
+    return () => {
+      unsubscribeGh()
+      unsubscribeGl()
+    }
   }, [])
 
   useEffect(() => {
     checkGhCli()
+    checkGlabCli()
     if (githubOrg) setOrgInput(githubOrg)
 
     // Load API keys
@@ -107,7 +116,7 @@ export function AdvancedSettings() {
             <Input
               value={orgInput}
               onChange={(e) => setOrgInput(e.target.value)}
-              placeholder="GitHub org name"
+              placeholder="GitHub org name / GitLab group name"
               className="flex-1"
             />
             <Button
@@ -118,6 +127,61 @@ export function AdvancedSettings() {
             >
               Save
             </Button>
+          </div>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title="GitLab Integration"
+        description="Configure GitLab CLI for repository operations and worktree management"
+      >
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-xs">
+            {glabCliStatus?.authenticated ? (
+              <span className="flex items-center gap-1.5 text-foreground">
+                <CheckCircle className="h-3.5 w-3.5 text-primary" />
+                Authenticated{glabCliStatus.username ? ` as ${glabCliStatus.username}` : ''}
+              </span>
+            ) : glabCliStatus?.installed ? (
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">glab CLI installed but not authenticated</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    setIsGlAuthenticating(true)
+                    setGlDeviceCode('')
+                    try {
+                      await startGlabAuth()
+                    } catch (error) {
+                      console.error('GitLab auth failed:', error)
+                    } finally {
+                      setIsGlAuthenticating(false)
+                      setGlDeviceCode('')
+                    }
+                  }}
+                  disabled={isGlAuthenticating}
+                >
+                  {isGlAuthenticating && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
+                  Authenticate
+                </Button>
+
+                {glDeviceCode && (
+                  <div className="mt-2 space-y-1">
+                    <p className="text-xs text-muted-foreground">Enter this code in your browser:</p>
+                    <code className="block text-lg font-mono font-bold bg-muted px-3 py-2 rounded text-center">
+                      {glDeviceCode}
+                    </code>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Waiting for authorization...
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <span className="text-muted-foreground">glab CLI not installed</span>
+            )}
           </div>
         </div>
       </SettingsSection>
