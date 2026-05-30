@@ -153,7 +153,7 @@ export class GitLabManager {
 
         // glab uses a web-based flow similar to gh
         if (onDeviceCode) {
-          const codeMatch = output.match(/code:\s*([A-Z0-9-]+)/)
+          const codeMatch = output.match(/code:\s*([A-Z0-9]{4}-[A-Z0-9]{4})/)
           if (codeMatch) {
             onDeviceCode(codeMatch[1])
           }
