@@ -14,6 +14,7 @@ const WORKSPACES_DIR = join(BASE_DIR, 'workspaces')
 export interface WorktreeRepo {
   fullName: string
   defaultBranch: string
+  cloneUrl?: string
 }
 
 export class WorktreeManager {
@@ -56,7 +57,7 @@ export class WorktreeManager {
       const repoName = repo.fullName.split('/').pop() || repo.fullName
       try {
         console.log(`[WorktreeManager] Processing repo: ${repo.fullName}`)
-        await this.ensureBareClone(org, repoName, repo.fullName, provider)
+        await this.ensureBareClone(org, repoName, repo.fullName, provider, repo.cloneUrl)
         await this.fetchBareClone(org, repoName)
         await this.createWorktree(taskId, org, repoName, repo.defaultBranch)
         this.sendProgress(taskId, repoName, 'done', true)
@@ -72,7 +73,13 @@ export class WorktreeManager {
     return taskDir
   }
 
-  private async ensureBareClone(org: string, repoName: string, fullName: string, provider?: string): Promise<void> {
+  private async ensureBareClone(
+    org: string,
+    repoName: string,
+    fullName: string,
+    provider?: string,
+    cloneUrl?: string
+  ): Promise<void> {
     const barePath = this.bareClonePath(org, repoName)
 
     if (existsSync(barePath)) {
@@ -96,8 +103,9 @@ export class WorktreeManager {
         'config', 'remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*'
       ], { cwd: barePath })
     } else {
-      console.log(`[WorktreeManager]   Executing: gh repo clone ${fullName} ${barePath} -- --bare`)
-      await execFileAsync('gh', ['repo', 'clone', fullName, barePath, '--', '--bare'], {
+      const githubCloneTarget = cloneUrl || `https://github.com/${fullName}.git`
+      console.log(`[WorktreeManager]   Executing: gh repo clone ${githubCloneTarget} ${barePath} -- --bare`)
+      await execFileAsync('gh', ['repo', 'clone', githubCloneTarget, barePath, '--', '--bare'], {
         timeout: 300000
       })
     }
